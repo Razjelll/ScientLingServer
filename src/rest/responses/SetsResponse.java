@@ -4,18 +4,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import data.DatabaseConnector;
+import data.files.MediaFileSystem;
 import data.queryBuilder.SetsQueryCreator;
 
 import javax.naming.NamingException;
+import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
-/**
- * Created by Razjelll on 19.04.2017.
- */
 public class SetsResponse {
 
     private static final String ID = "id";
@@ -30,9 +29,9 @@ public class SetsResponse {
     private static final String RECORDS_SIZE = "records_size";
     private static final String LANGUAGE_L1 = "l1";
     private static final String LANGUAGE_L2 = "l2";
+    private static final String CATALOG = "catalog";
 
     public static String create(String name, long l1, long l2, int sorting, int page, int limit ) throws IOException, SQLException, NamingException, ClassNotFoundException {
-
         String query = SetsQueryCreator.getQuery(name, l1, l2, sorting, page, limit);
         Connection connection = DatabaseConnector.getConnection();
         ObjectMapper mapper = new ObjectMapper();
@@ -44,6 +43,7 @@ public class SetsResponse {
         ArrayNode root = mapper.createArrayNode();
         Statement statement = connection.createStatement();
         ResultSet resultSet = statement.executeQuery(query);
+
         while(resultSet.next()){
             ObjectNode node = mapper.createObjectNode();
             node.put(ID, resultSet.getLong(ID));
@@ -54,13 +54,34 @@ public class SetsResponse {
             node.put(AUTHOR, resultSet.getString(AUTHOR));
             node.put(RATING, resultSet.getFloat(RATING));
             node.put(DOWNLOADS, resultSet.getInt(DOWNLOADS));
-            node.put(IMAGES_SIZE, resultSet.getInt(IMAGES_SIZE));
-            node.put(RECORDS_SIZE, resultSet.getInt(RECORDS_SIZE));
             node.put(LANGUAGE_L2, resultSet.getString(LANGUAGE_L1));
             node.put(LANGUAGE_L1, resultSet.getString(LANGUAGE_L2));
+            String catalog = resultSet.getString(CATALOG);
+            node.put(IMAGES_SIZE, getImageSize(catalog));
+            node.put(RECORDS_SIZE, getRecordsSize(catalog));
             root.add(node);
         }
-
         return root;
+    }
+
+    private static long getImageSize(String catalog) throws IOException {
+        return getMediaSize(MediaFileSystem.getImageCatalog(catalog));
+    }
+
+    private static long getRecordsSize(String catalog) throws IOException {
+        return getMediaSize(MediaFileSystem.getRecordsCatalog(catalog));
+    }
+
+    private static long getMediaSize(String catalogPath){
+        File imagesCatalog =  new File(catalogPath);
+        long size = 0;
+        if(imagesCatalog.exists()){
+            for(File file : imagesCatalog.listFiles()){
+                if(file.isFile()){
+                    size+=file.length();
+                }
+            }
+        }
+        return size;
     }
 }

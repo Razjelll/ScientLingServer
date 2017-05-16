@@ -31,5 +31,7 @@
     <orderEntry type="library" name="javax:javaee-web-api:6.0" level="project" />
     <orderEntry type="library" name="org.glassfish.jersey.containers:jersey-container-servlet:2.25.1" level="project" />
     <orderEntry type="library" name="JAX-WS-Glassfish / JAX-WS 2.2 RI / Metro 1.X / JWSDP 2.2" level="project" />
+    <orderEntry type="library" name="org.glassfish:javax.json:1.0.4" level="project" />
+    <orderEntry type="library" name="org.glassfish.jersey.media:jersey-media-multipart:2.25.1" level="project" />
   </component>
 </module>

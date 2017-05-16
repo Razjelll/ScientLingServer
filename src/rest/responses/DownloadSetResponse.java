@@ -8,7 +8,6 @@ import data.DatabaseConnector;
 import data.queryBuilder.LessonsQueryCreator;
 import data.queryBuilder.SingleSetQueryCreator;
 import data.queryBuilder.WordsQueryCreator;
-import sun.rmi.runtime.Log;
 
 import javax.naming.NamingException;
 import java.io.IOException;
@@ -32,11 +31,12 @@ public class DownloadSetResponse {
     private static final String CONTENT = "content";
     private static final String TRANSLATIONS = "translations";
     private static final String TRANSLATION_CONTENT = "c";
-    private static final String DEFINITIONS = "definitions";
+    private static final String DEFINITION = "definition";
     private static final String DEFINITION_CONTENT = "c";
     private static final String DEFINITION_TRANSLATION = "t";
     private static final String CATEGORY = "category";
     private static final String PART_OF_SPEECH = "part";
+    private static final String DIFFICULTY = "difficulty";
     private static final String SENTENCES = "sentences";
     private static final String SENTENCE_CONTENT = "c";
     private static final String SENTENCE_TRANSLATION = "t";
@@ -49,9 +49,17 @@ public class DownloadSetResponse {
     private static final String TRANSLATION_SEPARATOR = "::";
     private static final String ELEMENT_SEPARATOR = ";";
 
+    private static final String NUM_WORDS = "num_words";
     private static final String SET = "set";
     private static final String LESSONS = "lessons";
     private static final String WORDS = "words";
+
+    private static final int SET_POSITION = 0;
+    private static final int LESSONS_POSITION = 1;
+    private static final int WORDS_POSITION = 2;
+
+    private static final int NUM_NODES = 3;
+
 
     public static String create(long setId) throws IOException, SQLException, NamingException, ClassNotFoundException, InterruptedException {
         /*String wordsQuery = WordsQueryCreator.getQuery(setId);
@@ -61,7 +69,7 @@ public class DownloadSetResponse {
         Connection connection = DatabaseConnector.getConnection();
         ObjectMapper mapper = new ObjectMapper();
         //ArrayNode root = getRoot(wordsQuery,setQuery, connection, mapper);
-        ObjectNode root =getRoot(setId, connection, mapper);
+        ObjectNode root = getRoot(setId, connection, mapper);
 
         return mapper.writeValueAsString(root);
     }
@@ -69,10 +77,19 @@ public class DownloadSetResponse {
     private static ObjectNode getRoot(long setId, Connection connection, ObjectMapper mapper) throws SQLException, IOException, InterruptedException {
         ObjectNode root = mapper.createObjectNode();
 
-        CountDownLatch countDownLatch = new CountDownLatch(3);
+        CountDownLatch countDownLatch = new CountDownLatch(NUM_NODES);
 
-        final JsonNode[] nodes = new JsonNode[3];
-        new Thread(() -> {
+        final JsonNode[] nodes = new JsonNode[NUM_NODES];
+
+        int numWords = getNumWords(setId,connection);
+        //TODO obsługa braku słówek do ppobrania
+        //new Thread(new GetNodesRunnable(setId, NUM_WORDS, connection, mapper, nodes, countDownLatch)).start();
+        GetNodesRunnable getWordsNodesRunnable = new GetNodesRunnable(setId, WORDS, connection, mapper, nodes, countDownLatch);
+        getWordsNodesRunnable.setNumWords(numWords);
+        new Thread(getWordsNodesRunnable).start();
+        new Thread(new GetNodesRunnable(setId, SET,connection,mapper,nodes,countDownLatch)).start();
+        new Thread(new GetNodesRunnable(setId, LESSON,connection,mapper,nodes,countDownLatch)).start();
+       /* new Thread(() -> {
             try {
                 nodes[2] = getWordsArray(setId, connection, mapper);
                 countDownLatch.countDown();
@@ -103,21 +120,83 @@ public class DownloadSetResponse {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-        }).start();
+        }).start();*/
+
 
         countDownLatch.await();
 
-        if(nodes[0] != null){
-            root.set(SET, nodes[0]);
+        root.put(NUM_WORDS, numWords);
+        if(nodes[SET_POSITION] != null){
+            root.set(SET, nodes[SET_POSITION]);
         }
-        if(nodes[1] != null){
-            root.set(LESSONS, nodes[1]);
+        if(nodes[LESSONS_POSITION] != null){
+            root.set(LESSONS, nodes[LESSONS_POSITION]);
         }
-        if(nodes[2] != null){
-            root.set(WORDS, nodes[2]);
+        if(nodes[WORDS_POSITION] != null){
+            root.set(WORDS, nodes[WORDS_POSITION]);
         }
 
         return root;
+    }
+
+    private static  class GetNodesRunnable implements Runnable{
+
+        private JsonNode[] mNodes;
+        private long mSetId;
+        private String mNode;
+        private Connection mConnection;
+        private ObjectMapper mMapper;
+        private CountDownLatch mCountDownLatch;
+        private int mNumWords;
+
+        public GetNodesRunnable(long setId,String node, Connection connection, ObjectMapper mapper,
+                                JsonNode[] nodesArray, CountDownLatch countDownLatch){
+            mSetId = setId;
+            mNode = node;
+            mConnection = connection;
+            mMapper = mapper;
+            mCountDownLatch = countDownLatch;
+            mNodes = nodesArray;
+        }
+
+        public void setNumWords(int numWords){
+            mNumWords = numWords;
+        }
+
+        @Override
+        public void run() {
+            try {
+                switch (mNode){
+                    case SET:
+                        mNodes[SET_POSITION] = getSetNode(mSetId, mConnection); break;
+                    case LESSON:
+                        mNodes[LESSONS_POSITION] = getLessonArray(mSetId, mConnection, mMapper); break;
+                    case WORDS:
+                        mNodes[WORDS_POSITION] = getWordsArray(mSetId,mNumWords, mConnection, mMapper); break;
+                }
+                mCountDownLatch.countDown();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private static int getNumWords(long setId, Connection connection) throws SQLException {
+        ResultSet resultSet = getNumWordsResultSet(setId, connection);
+        if(resultSet.next()){
+            return resultSet.getInt(1);
+        }
+        return 0;
+    }
+
+    private static ResultSet getNumWordsResultSet(long setId, Connection connection) throws SQLException {
+        String query = WordsQueryCreator.getCountQuery(setId);
+        Statement statement = connection.createStatement();
+        return statement.executeQuery(query);
     }
 
     private static ObjectNode getSetNode(long setId, Connection connection) throws SQLException, IOException {
@@ -172,32 +251,18 @@ public class DownloadSetResponse {
         return arrayNode;
     }
 
-    private static int getWordsCount(long setId, Connection connection) throws SQLException {
-        String query = WordsQueryCreator.getCountQuery(setId);
-        Statement statement = connection.createStatement();
-        ResultSet resultSet = statement.executeQuery(query);
-        if(resultSet.next()){
-            return resultSet.getInt(1);
-        }
-        return 0;
-    }
-
-    private static ArrayNode getWordsArray(long setId, Connection connection, ObjectMapper mapper) throws SQLException, IOException, InterruptedException {
-        int wordsCount = getWordsCount(setId, connection);
-        if(wordsCount == 0){
-            return null;
-        }
+    private static ArrayNode getWordsArray(long setId,int numWords, Connection connection, ObjectMapper mapper) throws SQLException, IOException, InterruptedException {
         int wordsPackSize = 0;
         int threadCount = THREAD_COUNT;
-        if(wordsCount != 0){
-            if(wordsCount >= THREAD_COUNT){
-                wordsPackSize = wordsCount / THREAD_COUNT;
+        if(numWords != 0){
+            if(numWords >= THREAD_COUNT){
+                wordsPackSize = numWords / THREAD_COUNT;
             } else {
-                wordsPackSize = wordsCount;
-                threadCount = wordsCount;
+                wordsPackSize = numWords;
+                threadCount = numWords;
             }
 
-            if(wordsCount % wordsPackSize != 0){
+            if(numWords % wordsPackSize != 0){
                 wordsPackSize++;
             }
         }
@@ -261,6 +326,7 @@ public class DownloadSetResponse {
 
         String translations, definitions, sentences, hints, image, record;
         long category, partOfSpeech;
+        int difficulty;
         ObjectMapper mapper = new ObjectMapper();
 
         while (resultSet.next()) {
@@ -269,47 +335,51 @@ public class DownloadSetResponse {
             node.put(CONTENT, resultSet.getString(CONTENT));
 
             translations = resultSet.getString(TRANSLATIONS);
-            if (translations != null && !translations.isEmpty()) {
-                ArrayNode translationsArray = node.putArray(TRANSLATIONS);
-                putTranslations(translations, translationsArray, mapper);
+            if(translations != null && !translations.isEmpty()){
+                putTranslations(translations, node, mapper);
             }
 
-            definitions = resultSet.getString(DEFINITIONS);
-            if (definitions != null && !definitions.isEmpty()) {
-                ArrayNode definitionArray = node.putArray(DEFINITIONS);
-                putDefinitions(definitions, definitionArray, mapper);
+            sentences=resultSet.getString(SENTENCES);
+            if(sentences != null && !sentences.isEmpty()){
+                putSentences(sentences,node,mapper);
+            }
+
+            definitions = resultSet.getString(DEFINITION);
+            if(definitions != null && !definitions.isEmpty() ){
+                putDefinitions(definitions, node);
             }
 
             category = resultSet.getLong(CATEGORY);
-            if (category > 0) {
+            if(category >0){
                 node.put(CATEGORY, category);
             }
-
             partOfSpeech = resultSet.getLong(PART_OF_SPEECH);
-            if (partOfSpeech > 0) {
+            if(partOfSpeech>0) {
                 node.put(PART_OF_SPEECH, partOfSpeech);
             }
 
+            difficulty = resultSet.getInt(DIFFICULTY);
+            if(difficulty > 0){
+                node.put(DIFFICULTY, difficulty);
+            }
 
             sentences = resultSet.getString(SENTENCES);
-            if (sentences != null && !sentences.isEmpty()) {
-                ArrayNode sentencesNode = node.putArray(SENTENCES);
-                putSentences(sentences, sentencesNode, mapper);
+            if(sentences != null && !sentences.isEmpty()){
+                putSentences(sentences, node,mapper);
             }
 
             hints = resultSet.getString(HINTS);
-            if (hints != null && !hints.isEmpty()) {
-                ArrayNode hintsNode = node.putArray(HINTS);
-                putHints(hints, hintsNode, mapper);
+            if(hints != null && !hints.isEmpty()){
+                putHints(hints, node, mapper);
             }
 
             image = resultSet.getString(IMAGE);
-            if (image != null && !image.isEmpty()) {
+            if(image != null && !image.isEmpty()) {
                 node.put(IMAGE, image);
             }
 
             record = resultSet.getString(RECORD);
-            if (record != null && !record.isEmpty()) {
+            if(record!= null && !record.isEmpty()){
                 node.put(RECORD, record);
             }
 
@@ -319,47 +389,47 @@ public class DownloadSetResponse {
         return wordsArray;
     }
 
-    private static void putTranslations(String translations, ArrayNode translationsNode, ObjectMapper mapper) {
-        String[] translationsArray = translations.split(ELEMENT_SEPARATOR);
-        for (String trans : translationsArray) {
+    private static void putTranslations(String translations, ObjectNode node, ObjectMapper mapper) throws SQLException {
+            ArrayNode translationsNode = node.putArray(TRANSLATIONS);
+            putElements(translations, TRANSLATION_CONTENT, translationsNode, mapper);
+    }
+
+    private static void putElements(String element, String contentName, ArrayNode arrayNode, ObjectMapper mapper){
+        String[] elementArray = element.split(ELEMENT_SEPARATOR);
+        for (String trans : elementArray) {
             ObjectNode node = mapper.createObjectNode();
-            node.put(TRANSLATION_CONTENT, trans);
-            translationsNode.add(node);
+            node.put(contentName, trans);
+            arrayNode.add(node);
         }
     }
 
-    private static void putDefinitions(String definitions, ArrayNode definitionsNode, ObjectMapper mapper) {
-        String[] definitionsArray = definitions.split(ELEMENT_SEPARATOR);
-        for (String def : definitionsArray) {
-            String[] definition = def.split(TRANSLATION_SEPARATOR);
-            ObjectNode node = mapper.createObjectNode();
-            node.put(DEFINITION_CONTENT, definition[0]);
-            if (definition.length == 2) { //sprawdzamy czy definicja ma tłumaczenie
-                node.put(DEFINITION_TRANSLATION, definition[1]);
+    private static void putDefinitions(String definition, ObjectNode node) throws SQLException {
+        //putElementsWithTranslation(definitions, DEFINITION_CONTENT, DEFINITION_TRANSLATION, definitionsNode, mapper);
+        ObjectNode definitionNode = node.putObject(DEFINITION);
+        String[] definitionParts = definition.split(TRANSLATION_SEPARATOR);
+        definitionNode.put(DEFINITION_CONTENT, definitionParts[0]);
+        if(definitionParts.length == 2){
+            definitionNode.put(DEFINITION_TRANSLATION, definitionParts[1]);
+        }
+    }
+
+    private static void putSentences(String sentences, ObjectNode node, ObjectMapper mapper) {
+        ArrayNode sentencesNode = node.putArray(SENTENCES);
+        //putElementsWithTranslation(sentences, SENTENCE_CONTENT, SENTENCE_TRANSLATION, sentencesNode, mapper);
+        String[] sentenceParts = sentences.split(ELEMENT_SEPARATOR);
+        for (String elem : sentenceParts) {
+            String[] elementWithTranslation = elem.split(TRANSLATION_SEPARATOR);
+            ObjectNode translationNode = mapper.createObjectNode();
+            translationNode.put(SENTENCE_CONTENT, elementWithTranslation[0]);
+            if (elementWithTranslation.length == 2) { //sprawdzamy czy definicja ma tłumaczenie
+                translationNode.put(SENTENCE_TRANSLATION, elementWithTranslation[1]);
             }
-            definitionsNode.add(node);
+            sentencesNode.add(translationNode);
         }
     }
 
-    private static void putSentences(String sentences, ArrayNode sentencesNode, ObjectMapper mapper) {
-        String[] sentencesArray = sentences.split(ELEMENT_SEPARATOR);
-        for (String sent : sentencesArray) {
-            String[] sentence = sent.split(TRANSLATION_SEPARATOR);
-            ObjectNode node = mapper.createObjectNode();
-            node.put(SENTENCE_CONTENT, sentence[0]);
-            if (sentences.length() == 2) {
-                node.put(SENTENCE_TRANSLATION, sentence[1]);
-            }
-            sentencesNode.add(node);
-        }
-    }
-
-    private static void putHints(String hints, ArrayNode hintsNode, ObjectMapper mapper) {
-        String[] hintsArray = hints.split(ELEMENT_SEPARATOR);
-        for (String hint : hintsArray) {
-            ObjectNode node = mapper.createObjectNode();
-            node.put(HINT_CONTENT, hint);
-            hintsNode.add(node);
-        }
+    private static void putHints(String hints, ObjectNode node, ObjectMapper mapper) {
+        ArrayNode hintsNode = node.putArray(HINTS);
+        putElements(hints, HINT_CONTENT, hintsNode, mapper);
     }
 }

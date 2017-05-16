@@ -5,9 +5,7 @@ import data.FileReader;
 import java.io.File;
 import java.util.logging.Logger;
 
-/**
- * Created by Razjelll on 20.04.2017.
- */
+
 public class RegistrationQueryCreator {
 
     private static final String LOGIN = "login";

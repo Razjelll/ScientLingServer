@@ -13,9 +13,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.logging.Logger;
 
-/**
- * Created by Razjelll on 20.04.2017.
- */
+
 @Path("/registration")
 public class Registration {
 

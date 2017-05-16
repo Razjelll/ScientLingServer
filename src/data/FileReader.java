@@ -9,7 +9,7 @@ import java.util.Scanner;
 public class FileReader {
 
     public static String readFile(String filePath) throws IOException {
-        /*File file = new File(filePath);
+        /*FileInsert file = new FileInsert(filePath);
         if(file== null){
             return null;
         }
