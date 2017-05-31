@@ -138,6 +138,9 @@ public class SetParser {
                 case SET_DESCRIPTION:
                     set.setDescription(parser.nextTextValue()); break;
             }
+            if(set.getDescription()==null){
+                set.setDescription("");
+            }
         }
         mInsertManager.beginTransaction();
         try {

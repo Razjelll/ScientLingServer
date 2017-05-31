@@ -51,6 +51,22 @@ public class MediaFileSystem {
         return size;
     }
 
+    public static boolean hasImages(String catalog) throws IOException {
+        return hasFiles(getImageCatalog(catalog));
+    }
+
+    public static boolean hasRecords(String catalog) throws IOException {
+        return hasFiles(getRecordsCatalog(catalog));
+    }
+
+    public static boolean hasFiles(String catalogPath){
+        File directory = new File(catalogPath);
+        if(!directory.exists()){
+            return false;
+        }
+        return directory.listFiles().length >0;
+    }
+
     private static boolean deleteDirectory(File directory){
         if(directory.isDirectory()){
             for(File fileEntry : directory.listFiles()){

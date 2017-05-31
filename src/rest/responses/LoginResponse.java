@@ -12,9 +12,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
-/**
- * Created by Razjelll on 19.04.2017.
- */
 public class LoginResponse {
 
     private static final String LOGIN = "login";

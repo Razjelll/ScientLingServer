@@ -35,6 +35,11 @@ public class DownloadMediaResponse {
                     zipOutputStream.write(inputStream.read());
                 }*/
                 while(inputStream.read(buffer) != -1){
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                     zipOutputStream.write(buffer);
                     zipOutputStream.flush();
                 }

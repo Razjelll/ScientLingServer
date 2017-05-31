@@ -3,6 +3,7 @@ package rest;
 import data.DatabaseConnector;
 import data.SetParser;
 import data.files.*;
+import org.glassfish.jersey.media.multipart.BodyPart;
 import rest.json.RatingRequest;
 import rest.json.SetImagesRequest;
 import data.queryExecutors.*;
@@ -234,6 +235,8 @@ public class Sets {
         logger.severe("Content length: " + contentLength);
         StreamingOutput streamingOutput = DownloadMediaResponse.create(DownloadMediaResponse.MediaType.IMAGES,catalog);
         return Response.ok().header("Content-Length", contentLength).entity(streamingOutput).build();
+        //return Response.ok().header("X-Content-Length", contentLength).entity(streamingOutput).build();
+        //return Response.ok().entity(streamingOutput).build();
     }
 
     @GET

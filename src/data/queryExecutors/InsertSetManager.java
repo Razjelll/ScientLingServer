@@ -10,9 +10,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 
-/**
- * Created by Razjelll on 29.04.2017.
- */
+
 public class InsertSetManager {
     private Connection mDbConnection;
     private SetExecutor mSetExecutor;
